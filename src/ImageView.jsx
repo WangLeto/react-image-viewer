@@ -281,21 +281,20 @@ class ImageView extends Component {
         }
       }
       // 首张向左回弹
-      if (state.currentIndex === 0) {
-        if (rect.left > 0 || rect.left + extraX > 0) {
-          shouldDamp = true;
-          transX = 0;
-        }
+      // if (state.currentIndex === 0) {
+      if (rect.left > 0 || rect.left + extraX > 0) {
+        shouldDamp = true;
+        transX = 0;
       }
-      if (state.currentIndex === imagesSizes.length - 1 || imagesSizes.length === 1) {
-        // 末张，或仅有一张，向右回弹
-        if (rect.right < maskSize.width || rect.right + extraX < maskSize.width) {
-          shouldDamp = true;
-          transX = maskSize.width - rect.width;
-        }
+      // }
+      // if (state.currentIndex === imagesSizes.length - 1 || imagesSizes.length === 1) {
+      // 末张，或仅有一张，向右回弹
+      if (rect.right < maskSize.width || rect.right + extraX < maskSize.width) {
+        shouldDamp = true;
+        transX = maskSize.width - rect.width;
       }
+      // }
 
-      // todo 判断切换图片
       if (imagesSizes.length !== 1) {
         // 非末张，判断向右切换
         if (state.currentIndex !== imagesSizes.length - 1) {
@@ -379,6 +378,8 @@ class ImageView extends Component {
       currentIndex: newIndex,
       translateX: 0,
       translateY: 0,
+      scaleRatio: 1,
+      enableTransformAnimation: true
     });
   }
 
@@ -414,7 +415,7 @@ class ImageView extends Component {
   }
 
   doubleClickScale = (target, clientX, clientY) => {
-    // todo: 添加缩放倍率相同模式的检测，进行适当跳过
+    // fixme 检测图片长宽比、原始尺寸等问题，适当跳过某些缩放模式
     scaleModes.currentScaleMode = (scaleModes.currentScaleMode + 1) % 3;
     // 缩放部分编号是统一的
     lastAction = scaleModes.currentScaleMode;
@@ -473,21 +474,24 @@ class ImageView extends Component {
         </div>
         <div className="images">
           {this.props.images.map((src, idx) => {
+
             let state = this.state;
-            const matrix = `matrix(${state.scaleRatio.toFixed(3)}, 0, 0, ${state.scaleRatio.toFixed(3)}, ${state.translateX - this.maskSize.width * idx}, ${state.translateY.toFixed(3)})`;
-            return <img draggable src={src} alt={`图 ${idx + 1}`} key={idx} idx={idx} cur={this.state.currentIndex}
+            const matrix = `matrix(${state.scaleRatio}, 0, 0, ${state.scaleRatio}, ` +
+              `${state.translateX - this.maskSize.width * idx}, ${state.translateY})`;
+
+            return <img draggable src={src} alt={`图 ${idx + 1}`} key={idx}
               style={
                 Object.assign({},
-                  this.state.currentIndex === idx ?
+                  state.currentIndex === idx ?
                     {
                       transform: matrix,
-                      transition: this.state.transition
+                      transition: state.transition
                     } :
                     {
-                      // todo: 旁侧图片位移
-                      transition: `matrix(1,0,0,1,${this.maskSize.width * (this.state.currentIndex - idx)},0)`,
+                      // 旁侧图片偏移
+                      transform: `matrix(1, 0, 0, 1, ${-this.maskSize.width * (state.currentIndex)}, 0)`,
                     },
-                  this.state.enableTransformAnimation ? { transition: 'transform 400ms' } : null
+                  state.enableTransformAnimation ? { transition: 'transform 400ms' } : null
                 )
               }
               onLoad={(e) => this.onImagesLoad(e, idx)}
@@ -495,8 +499,7 @@ class ImageView extends Component {
               onTouchEnd={this.stopTouch}
               onTouchCancel={this.cancelTouch}
               onTouchMove={this.touchMove}
-              onContextMenu={(e) => { e.preventDefault() }}
-            />
+              onContextMenu={(e) => { e.preventDefault() }} />
           })}
         </div>
       </div>
