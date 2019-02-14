@@ -42,7 +42,6 @@ const scaleModes = {
   LongSideFit: 1,
   ShortSideFit: 2,
   // Current Mode, always init as LongSideFit
-  // fixme 横屏时第二三张图有问题
   currentScaleMode: 1
 };
 const Actions = {
@@ -65,7 +64,8 @@ const distance = (x1, y1, x2, y2) => {
   let b = y1 - y2;
   return Math.sqrt(a * a + b * b);
 };
-
+// 自由缩放时，较长边最终的显示尺寸不小于屏幕的比例
+const freeScaleMinRatioForLongSide = 0.5;
 class ImageView extends Component {
   state = {
     // 当前展示的图片序数
@@ -111,7 +111,6 @@ class ImageView extends Component {
 
   stopTouch = (e) => {
     // 还有一个 touch，解除缩放模式，进入移动
-    // todo IMPORTANT 待探索：使用 touches.length 并不准确
     if (e.targetTouches.length === 1) {
       console.log(`%cOne touch left on ${e.target.tagName}`, 'color: #ed12ff');
       e.persist()
@@ -261,8 +260,7 @@ class ImageView extends Component {
         return;
       }
 
-      // todo 时间与距离生成的效果不够好，考虑引入时间戳计算时间差值
-      // todo 同时利用速度决定是否切换图片
+      // todo 时间与距离生成的效果不够好，考虑引入时间戳计算时间差值；同时利用速度决定是否切换图片（？）
       let t = (distance(lastTwo[0].x, lastTwo[0].y, lastTwo[1].x, lastTwo[1].y) / MoveRatio / 3).toFixed(3);
       let animation = `all ${t}s linear`;
       this.out.setState({
@@ -280,6 +278,24 @@ class ImageView extends Component {
       let dimen = imagesSizes[state.currentIndex];
       let rect = this.imgBounding.rect;
       let shouldAdjust = false;
+
+      // 图片过小的限制
+      let newScaleRation = state.scaleRatio;
+      if (rect.width < maskSize.width && rect.height < maskSize.height) {
+        // 图片比原始显示小
+        if (rect.width < dimen.width) {
+          let longSide = rect.width / maskSize.width > rect.height / maskSize.height ? 'width' : 'height';
+          // 令长边不小于屏幕的 freeScaleMinRatioForLongSide 倍，但以初始显示效果为准
+          if (rect[longSide] / maskSize[longSide] < freeScaleMinRatioForLongSide) {
+            if (maskSize[longSide] * freeScaleMinRatioForLongSide > dimen[longSide]) {
+              newScaleRation = 1;
+            } else {
+              newScaleRation = maskSize[longSide] * freeScaleMinRatioForLongSide / dimen[longSide];
+            }
+          }
+        }
+      }
+
       // Y 轴部分 ------------------------------------- ヽ(￣▽￣)ﾉ 
       // 图片高高度大于屏幕
       if (rect.height > maskSize.height) {
@@ -296,14 +312,14 @@ class ImageView extends Component {
       } else {
         // 图片高度小于屏幕，直接置于中部
         shouldAdjust = true;
-        transY = (1 - state.scaleRatio) * (dimen.height / 2);
+        transY = (1 - newScaleRation) * (dimen.height / 2);
       }
       // X 轴部分 ------------------------------------- ヾ(๑╹◡╹)ﾉ" 
       // 图片宽度小于屏幕，需要居中
       if (rect.width < maskSize.width) {
         shouldAdjust = true;
         // 计算tip: 移动图像中心点
-        transX = (1 - state.scaleRatio) * (dimen.width / 2);
+        transX = (1 - newScaleRation) * (dimen.width / 2);
       } else {
         // 宽度大于屏幕，回弹
         if (rect.left > 0) {
@@ -319,6 +335,7 @@ class ImageView extends Component {
 
       if (shouldAdjust) {
         this.setState({
+          scaleRatio: newScaleRation,
           translateX: transX,
           translateY: transY,
           transition: 'all 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275)'
@@ -347,13 +364,16 @@ class ImageView extends Component {
       enableTransformAnimation: true
     }, () => {
       this.getRect2TranslateFix();
-      this.imgBounding.reloadImage(this.state.currentIndex);
+      this.imgBounding.loadImageBound(this.state.currentIndex);
     });
     return true;
   }
 
   freeScale = (e) => {
-    let one = e.touches['0'], two = e.touches['1'];
+    if (e.targetTouches.length < 2) {
+      return;
+    }
+    let one = e.targetTouches['0'], two = e.targetTouches['1'];
     let rect = this.imgBounding.rect;
     let newRatio = distance(one.clientX, one.clientY, two.clientX, two.clientY) /
       distance(...preTouchesClientx1y1x2y2) * this.state.scaleRatio || 1;
@@ -546,8 +566,8 @@ class ImageView extends Component {
     get rect() {
       return this.img.getBoundingClientRect();
     },
-    reloadImage(index) {
-      console.log(`reload image %c${index}`, 'color: orange; font-weight: bold');
+    loadImageBound(index) {
+      console.log(`load image bound %c${index}`, 'color: orange; font-weight: bold');
       this.img = document.querySelectorAll('.images img')[index];
     }
   }
@@ -563,8 +583,17 @@ class ImageView extends Component {
   updateOnResize = (() => {
     let tick = null;
     const update = () => {
-      const callback = () => {
-        this.maskSize = getMaskSize();
+      // 注意依赖关系：计算 matrix 时用到了 maskSize，所以必须最先更新
+      this.maskSize = getMaskSize();
+      this.setState({
+        translateX: 0,
+        translateY: 0,
+        scaleRatio: 1,
+        enableTransformAnimation: false
+      }, callback.bind(this));
+      // I use the function keyword declaration to display the executing order better 
+      // because jslint will warn the arrow function being used before defined.
+      function callback() {
         let imgs = document.querySelectorAll('.images img');
         imgs.forEach((img, idx) => {
           let size = imagesSizes[idx];
@@ -573,13 +602,6 @@ class ImageView extends Component {
         });
         this.getRect2TranslateFix();
       };
-      // fixme 第二张图片在旋转屏幕后 translateY 错误
-      this.setState({
-        translateX: 0,
-        translateY: 0,
-        scaleRatio: 1,
-        enableTransformAnimation: false
-      }, callback);
     };
     return () => {
       // this.recordTimer 不适用，这里需要 debounce 函数
@@ -600,20 +622,35 @@ class ImageView extends Component {
     }
   }
 
+  disableBodyMove = (e) => {
+    e.preventDefault();
+  }
+
   componentWillMount = () => {
     window.addEventListener('resize', this.updateOnResize);
+    let passiveSupport = false;
+    try {
+      let option = Object.defineProperty({}, 'passive', {
+        get: () => {
+          passiveSupport = true;
+          return false;
+        }
+      });
+      window.addEventListener('passivetest', null, option);
+    } catch (err) { }
+    document.body.addEventListener('touchmove', this.disableBodyMove, passiveSupport ? { passive: false } : false);
   }
 
   componentDidMount = () => {
-    this.imgBounding.reloadImage(0);
+    this.imgBounding.loadImageBound(0);
     this.maskSize = getMaskSize();
   }
 
   componentWillUnmount = () => {
     this.props.onUnmount();
     window.removeEventListener('resize', this.updateOnResize);
+    document.body.removeEventListener('touchmove', this.disableBodyMove);
   }
-
 }
 /*
  * props: 传入图片的字符串（单张）或数组（多张）
