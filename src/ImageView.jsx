@@ -111,15 +111,19 @@ class ImageView extends Component {
 
   stopTouch = (e) => {
     // 还有一个 touch，解除缩放模式，进入移动
-    if (e.touches.length === 1) {
+    // todo IMPORTANT 待探索：使用 touches.length 并不准确
+    if (e.targetTouches.length === 1) {
+      console.log(`%cOne touch left on ${e.target.tagName}`, 'color: #ed12ff');
+      e.persist()
+      console.log(e);
       this.setState({
         isScale: false
       });
       this.recordPreTouchPosition(e.touches['0']);
-    } else if (e.touches.length === 0) {
+    } else if (e.targetTouches.length === 0) {
       touching = false;
       preTouchesClientx1y1x2y2 = [];
-      console.log(`last Action: %c${Object.keys(Actions).find(key => Actions[key] === this.state.lastAction)}`,
+      console.log(`before touch stop: %c${Object.keys(Actions).find(key => Actions[key] === this.state.lastAction)}`,
         'color:green; font-weight:bold');
       if (timers.doubleClickTimer) {
         // todo 暂时移除了双击缩放
@@ -129,9 +133,9 @@ class ImageView extends Component {
       }
       if (!timers.firstClickTimer && !timers.doubleClickTimer) {
         if (this.state.lastAction === Actions.Move) {
-          this.inertiaDamp.extraMove(e.target);
+          this.inertiaDamp.extraMove();
         } else if (this.state.lastAction === Actions.Free) {
-          this.inertiaDamp.scaleDamp(e.target);
+          this.inertiaDamp.scaleDamp();
         }
       }
     }
@@ -157,7 +161,7 @@ class ImageView extends Component {
         return;
       }
       let touch = touches[0];
-      let rect = e.target.getBoundingClientRect();
+      let rect = this.imgBounding.rect;
       let posX = rect.left + rectLeft2TransXFix;
       let posY = rect.top + rectTop2TransYFix;
       // 仅在高度大于 Y轴高度 的情况下支持 Y 轴移动
@@ -184,14 +188,15 @@ class ImageView extends Component {
   // 记录 move 最后 2 个位移数据，从而实现惯性效果
   // [{translateX: n, translateY: n}, {..}]
   inertiaDamp = {
-    lastTwoMove: [null, null],
+    // 写 2 个 null 的话有时会出错，why？
+    lastTwoMove: [{ x: 0, y: 0 }, { x: 0, y: 0 }],
     out: this,
     recordTranslate: function (x, y) {
       this.lastTwoMove.shift();
       this.lastTwoMove.push({ x: x, y: y });
     },
     // 进入此处时不可能处于缓动过程中
-    extraMove: function (target) {
+    extraMove: function () {
       let state = this.out.state;
       if (state.lastAction !== Actions.Move) {
         return;
@@ -199,18 +204,17 @@ class ImageView extends Component {
 
       let lastTwo = this.lastTwoMove;
       let maskSize = this.out.maskSize;
-      let rect = target.getBoundingClientRect();
+      let rect = this.out.imgBounding.rect;
       let dimen = imagesSizes[state.currentIndex];
 
-      let extraX = (lastTwo[0].x - lastTwo[1].x) * MoveRatio;
-      let extraY = rect.height > maskSize.height ? (lastTwo[0].y - lastTwo[1].y) * MoveRatio : 0;
+      let extraX = (lastTwo[1].x - lastTwo[0].x) * MoveRatio;
+      let extraY = rect.height > maskSize.height ? (lastTwo[1].y - lastTwo[0].y) * MoveRatio : 0;
       let transX = extraX + state.translateX;
       let transY = extraY + state.translateY;
 
-      // 以下判断是否是 overflow，如是则需要弹回，阻尼部分
+      // 以下判断是否是溢出，如是则需要弹回，呈现阻尼效果
       let shouldDamp = false;
       // 图片高度大于屏幕时（图片高度小于屏幕时禁止 Y 轴移动）
-      // fixme 仅第一张图正确回弹到边缘，第二张图不能显示最上方、最下方
       if (rect.height >= maskSize.height) {
         if (rect.top > 0 || rect.top + extraY > 0) {
           // 下拉溢出，或惯性移动溢出
@@ -223,18 +227,21 @@ class ImageView extends Component {
           transY = -(rect.height + rectTop2TransYFix - dimen.height);
         }
       }
-      // 未达到触发 shift img 的条件，分别向左右回弹
       if (rect.width < maskSize.width) {
+        // 如果宽度小于屏幕，而达不到切换条件的回弹
+        // 达到条件的话该设置不会起效
         shouldDamp = true;
         transX = (1 - state.scaleRatio) * (dimen.width / 2);
       } else {
+        // 图片宽度大于屏幕
+        // 未达到触发 shift img 的条件，分别向左右回弹
         if (rect.left + extraX > 0) {
           shouldDamp = true;
-          transX = 0;
+          transX = state.translateX - rect.left;
         } else if (rect.right + extraX < maskSize.width) {
           shouldDamp = true;
-          // todo 右侧贴边
-          transX = 0;
+          // rect 右侧此时应还在屏幕外，否则将触发 shift image
+          transX = state.translateX - (rect.right - maskSize.width);
         }
       }
 
@@ -243,10 +250,10 @@ class ImageView extends Component {
 
       let wannaShift = false;
       let shiftOrientation = null;
-      if (rect.left > 0 && extraX < 0) {
+      if (rect.left > 0 && extraX > 0) {
         wannaShift = true;
         shiftOrientation = orientation.left;
-      } else if (rect.right < maskSize.width && extraX > 0) {
+      } else if (rect.right < maskSize.width && extraX < 0) {
         wannaShift = true;
         shiftOrientation = orientation.right;
       }
@@ -265,26 +272,26 @@ class ImageView extends Component {
       });
     },
     // scale 后的正骨（误）复位效果
-    scaleDamp: (target) => {
+    scaleDamp: () => {
       let state = this.state;
       let maskSize = this.maskSize;
       let transX = state.translateX;
-      let transY = 0;
+      let transY = state.translateY;
       let dimen = imagesSizes[state.currentIndex];
-      let rect = target.getBoundingClientRect();
+      let rect = this.imgBounding.rect;
       let shouldAdjust = false;
       // Y 轴部分 ------------------------------------- ヽ(￣▽￣)ﾉ 
       // 图片高高度大于屏幕
       if (rect.height > maskSize.height) {
-        // 检测上边界
+        // 上边界低于屏幕
         if (rect.top > 0) {
           shouldAdjust = true;
           transY = 0 + rectTop2TransYFix;
         }
-        // 检测下边界
+        // 下边界高于屏幕
         if (rect.bottom < maskSize.height) {
           shouldAdjust = true;
-          transY = -(rect.height + rectTop2TransYFix - dimen.originHeight);
+          transY += maskSize.height - rect.bottom;
         }
       } else {
         // 图片高度小于屏幕，直接置于中部
@@ -300,11 +307,13 @@ class ImageView extends Component {
       } else {
         // 宽度大于屏幕，回弹
         if (rect.left > 0) {
+          // 左侧出现空白
           shouldAdjust = true;
           transX = transX - rect.left;
         } else if (rect.right < maskSize.width) {
+          // 右侧出现空白
           shouldAdjust = true;
-          transX = maskSize.width - rect.width;
+          transX = state.translateX + (maskSize.width - rect.right);
         }
       }
 
@@ -345,7 +354,7 @@ class ImageView extends Component {
 
   freeScale = (e) => {
     let one = e.touches['0'], two = e.touches['1'];
-    let rect = one.target.getBoundingClientRect();
+    let rect = this.imgBounding.rect;
     let newRatio = distance(one.clientX, one.clientY, two.clientX, two.clientY) /
       distance(...preTouchesClientx1y1x2y2) * this.state.scaleRatio || 1;
     let newOrigin = this.relativeCoordinate((one.clientX + two.clientX) / 2, (one.clientY + two.clientY) / 2, rect);
@@ -360,7 +369,7 @@ class ImageView extends Component {
       lastAction: Actions.Free
     });
     preTouchesClientx1y1x2y2 = [one.clientX, one.clientY, two.clientX, two.clientY];
-    this.recordTimer('justFreeScaled', 50);
+    this.recordTimer('justFreeScaled', 100);
   }
 
   // fixme 最后一张图片大概率双击跳动，包括限制 Y 轴移动的时候 move
@@ -381,7 +390,7 @@ class ImageView extends Component {
     };
 
     let newRatio = getScaleRatio(scaleModes.currentScaleMode);
-    let rect = target.getBoundingClientRect();
+    let rect = this.imgBounding.rect;
     let newOrigin = {
       x: this.relativeCoordinate(clientX, clientY, rect).x,
       y: imagesSizes[this.state.currentIndex].height / 2,
@@ -403,7 +412,7 @@ class ImageView extends Component {
       lastAction: scaleModes.currentScaleMode
     }, () => setTimeout(() => {
       // fixme 换用 transition end 事件回调来做
-      this.inertiaDamp.scaleDamp(target);
+      this.inertiaDamp.scaleDamp();
     }, 400));
   }
 
@@ -551,17 +560,33 @@ class ImageView extends Component {
     return { x: cx, y: cy };
   }
 
-  // fixme 更新图片位置
-  updateOnResize = () => {
-    let imgs = document.querySelectorAll('.images img');
-    imgs.forEach((img, idx) => {
-      let size = imagesSizes[idx];
-      size.width = img.width;
-      size.height = img.height;
-    });
-    this.getRect2TranslateFix();
-    this.maskSize = getMaskSize();
-  }
+  updateOnResize = (() => {
+    let tick = null;
+    const update = () => {
+      const callback = () => {
+        this.maskSize = getMaskSize();
+        let imgs = document.querySelectorAll('.images img');
+        imgs.forEach((img, idx) => {
+          let size = imagesSizes[idx];
+          size.width = img.width;
+          size.height = img.height;
+        });
+        this.getRect2TranslateFix();
+      };
+      // fixme 第二张图片在旋转屏幕后 translateY 错误
+      this.setState({
+        translateX: 0,
+        translateY: 0,
+        scaleRatio: 1,
+        enableTransformAnimation: false
+      }, callback);
+    };
+    return () => {
+      // this.recordTimer 不适用，这里需要 debounce 函数
+      clearTimeout(tick);
+      tick = setTimeout(update, 100);
+    };
+  })();
 
   onImagesLoad = ({ target: img }, idx) => {
     imagesSizes[idx] = {
@@ -576,11 +601,11 @@ class ImageView extends Component {
   }
 
   componentWillMount = () => {
-    this.imgBounding.reloadImage(0);
     window.addEventListener('resize', this.updateOnResize);
   }
 
   componentDidMount = () => {
+    this.imgBounding.reloadImage(0);
     this.maskSize = getMaskSize();
   }
 
