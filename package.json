@@ -23,5 +23,6 @@
     "not dead",
     "not ie <= 11",
     "not op_mini all"
-  ]
+  ],
+  "homepage" : "http://http://blog.letow.top/react-image-viewer"
 }
