@@ -1,13 +1,13 @@
 .__image_view__ {
   .mask {
+    transition: 500ms;
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba($color: #000, $alpha: 1);
+    background: #2a2a2a;
     z-index: 100;
-    // display: flex;
     flex-direction: column;
     overflow: hidden;
   }
@@ -24,9 +24,21 @@
     display: flex;
     height: $topBarHeight;
     justify-content: space-between;
-    background: rgba($color: #000, $alpha: 0.4);
+    background: rgba($color: #000, $alpha: 0.2);
     z-index: 210;
     transition: 400ms;
+    // https://developers.google.com/web/fundamentals/performance/rendering/stick-to-compositor-only-properties-and-manage-layer-count?hl=zh-cn
+    will-change: transform;
+
+    .shadow {
+      background: url(../assets/shadow.svg) repeat-x;
+      position: absolute;
+      top: $topBarHeight;
+      left: 0;
+      right: 0;
+      height: $topBarHeight / 5;
+      width: 100%;
+    }
   }
 
   .back,
