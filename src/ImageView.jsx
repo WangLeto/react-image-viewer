@@ -1,45 +1,44 @@
-import React, { Component } from 'react';
+import React, { PureComponent } from 'react';
 import ReactDOM from 'react-dom';
 import './styles/ImageView.scss';
 
 // 切换图片的方向
 const orientation_left = -1, orientation_right = 1;
 
-// 双击缩放----
-// 默认缩放模式：⑴ 原始尺寸、⑵ 最长边充满、⑶ 最短边充满
-const scaleModes = {
-  OriginalSize: 0,
-  LongSideFit: 1,
-  ShortSideFit: 2,
-  // Current Mode, always init as LongSideFit
-  currentScaleMode: 1
-};
 const Actions = {
-  OriginalSize: 0,
-  LongSideFit: 1,
-  ShortSideFit: 2,
-  Free: 3,
-  Move: 4
+  doubleClickScale: 1,
+  shiftImage: 2,
+  free: 3,
+  move: 4
 };
 // 惯性移动倍数
 const MoveRatio = 15;
 
-// 自由缩放时，较长边最终的显示尺寸不小于屏幕的比例
-const freeScaleMinRatioForLongSide = 0.5;
-class ImageView extends Component {
-  state = {
-    showView: false,
-    // 当前展示的图片序数
-    currentIndex: this.props.currentIndex,
-    // 当前图片缩放倍率
-    scaleRatio: 1,
-    // 显示顶栏
-    showTopBar: true,
-    // 平移量
-    translateX: 0,
-    translateY: 0,
-    // 先在双击时启用吧
-    enableTransformAnimation: false,
+// 自由缩放时，较长边最终的显示尺寸不小于自动生成比例的比例
+// finalAllowedMinRatio = freeScaleRatioByMinRatio * ratioList.min
+const freeScaleRatioByMinRatio = 0.6;
+// 使用 PureComponent，state 中如果使用 Array / Object，则需要在 shouldComponentUpdate 额外处理，或使用 immutable 思想
+class ImageView extends PureComponent {
+  constructor(props) {
+    super(props);
+    let { width: mWidth, height: mHeight } = this.getMaskSize();
+    this.state = {
+      // 当前展示的图片序数
+      currentIndex: this.props.currentIndex,
+      // 当前图片缩放倍率
+      scaleRatio: 1,
+      // 显示顶栏
+      showTopBar: true,
+      // 平移量
+      translateX: 0,
+      translateY: 0,
+      // 双击时、切换图片时设为 true，产生动画效果
+      enableTransformAnimation: false,
+      transition: '',
+      // 从外部移入 state 内部，以配合 pure component 特性
+      maskWidth: mWidth,
+      maskHeight: mHeight,
+    }
   }
 
   // 判断：如果短时间内离开，且无移动动作，则为工具栏切换
@@ -75,15 +74,14 @@ class ImageView extends Component {
       // console.log(`before touch stop: %c${Object.keys(Actions).find(key => Actions[key] === this.state.lastAction)}`,
       //   'color:green; font-weight:bold');
       if (this.timers.doubleClickTimer) {
-        // todo 暂时移除了双击缩放
         let removedTouch = e.changedTouches[0];
         this.doubleClickScale(removedTouch.target, removedTouch.clientX, removedTouch.clientY);
         return;
       }
       if (!this.timers.firstClickTimer && !this.timers.doubleClickTimer) {
-        if (this.state.lastAction === Actions.Move) {
+        if (this.state.lastAction === Actions.move) {
           this.inertiaDamp.extraMove();
-        } else if (this.state.lastAction === Actions.Free) {
+        } else if (this.state.lastAction === Actions.free) {
           this.inertiaDamp.scaleDamp();
         }
       }
@@ -108,9 +106,8 @@ class ImageView extends Component {
       let posX = rect.left + this.rectLeft2TransXFix;
       let posY = rect.top + this.rectTop2TransYFix;
       // 仅在高度大于 Y轴高度 的情况下支持 Y 轴移动
-      let maskSize = this.maskSize;
       let forbidTranslateY = false;
-      if (rect.height <= maskSize.height) {
+      if (rect.height <= this.state.maskHeight) {
         forbidTranslateY = true;
       }
       let transX = touch.pageX - this.preTouchPosition.x + posX;
@@ -121,7 +118,7 @@ class ImageView extends Component {
         translateY: transY,
         transition: '',
         enableTransformAnimation: false,
-        lastAction: Actions.Move
+        lastAction: Actions.move
       });
       this.recordPreTouchPosition(touch.clientX, touch.clientY);
       this.inertiaDamp.recordTranslate(touch.pageX, touch.pageY);
@@ -140,12 +137,12 @@ class ImageView extends Component {
     // 进入此处时不可能处于缓动过程中
     extraMove: () => {
       let state = this.state;
-      if (state.lastAction !== Actions.Move) {
+      if (state.lastAction !== Actions.move) {
         return;
       }
 
       let lastTwo = this.inertiaDamp.lastTwoMove;
-      let { width: mWidth, height: mHeight } = this.maskSize;
+      let mWidth = this.state.maskWidth, mHeight = this.state.maskHeight;
       let { top, right, bottom, left, height, width } = this.imgBounding.rect;
       let dimen = this.imagesSizes[state.currentIndex];
       let newScaleRatio = this.inertiaDamp.scaleRatioCheck();
@@ -216,13 +213,13 @@ class ImageView extends Component {
         scaleRatio: newScaleRatio,
         translateX: transX,
         translateY: transY,
-        transition: shouldDamp ? 'all 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275)' : animation
+        transition: shouldDamp ? 'all 200ms cubic-bezier(0.18, 0.89, 0.38, 1.2)' : animation
       });
     },
     // scale 后的正骨（误）复位效果
     scaleDamp: () => {
       let state = this.state;
-      let { width: mWidth, height: mHeight } = this.maskSize;
+      let mWidth = this.state.maskWidth, mHeight = this.state.maskHeight;
       let { top, right, bottom, left, height, width } = this.imgBounding.rect;
       let transX = state.translateX;
       let transY = state.translateY;
@@ -261,36 +258,27 @@ class ImageView extends Component {
           scaleRatio: newScaleRatio,
           translateX: transX,
           translateY: transY,
-          transition: 'all 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+          transition: 'all 200ms cubic-bezier(0.18, 0.89, 0.38, 1.2)'
         });
       }
     },
     scaleRatioCheck: () => {
-      let dimen = this.imagesSizes[this.state.currentIndex];
       let rect = this.imgBounding.rect;
-      let maskSize = this.maskSize;
+      let mWidth = this.state.maskWidth, mHeight = this.state.maskHeight;
+      let minRatio = this.doubleScaleRatios.minRatio;
       // 图片过小的限制
-      let newScaleRatio = null;
-      if (rect.width < maskSize.width && rect.height < maskSize.height) {
-        // 图片比原始显示小
-        if (rect.width < dimen.width) {
-          let longSide = rect.width / maskSize.width > rect.height / maskSize.height ? 'width' : 'height';
-          // 令长边不小于屏幕的 freeScaleMinRatioForLongSide 倍，但以初始显示效果为准
-          if (rect[longSide] / maskSize[longSide] < freeScaleMinRatioForLongSide) {
-            if (maskSize[longSide] * freeScaleMinRatioForLongSide > dimen[longSide]) {
-              newScaleRatio = 1;
-            } else {
-              newScaleRatio = maskSize[longSide] * freeScaleMinRatioForLongSide / dimen[longSide];
-            }
-          }
+      let ratio = this.state.scaleRatio;
+      if (rect.width < mWidth && rect.height < mHeight) {
+        if (ratio < minRatio) {
+          return minRatio * freeScaleRatioByMinRatio;
         }
       }
-      return newScaleRatio ? newScaleRatio : this.state.scaleRatio;
+      return ratio;
     }
   }
 
   tryShiftImg = (shiftOrientation) => {
-    let allNum = this.imagesSizes.length;
+    let allNum = this.props.images.length;
     if (allNum === 1) {
       return;
     }
@@ -306,10 +294,12 @@ class ImageView extends Component {
       translateX: 0,
       translateY: 0,
       scaleRatio: 1,
-      enableTransformAnimation: true
+      enableTransformAnimation: true,
+      lastAction: Actions.shiftImage
     }, () => {
       this.getRect2TranslateFix();
       this.imgBounding.loadImageBound(this.state.currentIndex);
+      this.doubleScaleRatios.updateScaleRatioList();
     });
     return true;
   }
@@ -336,41 +326,38 @@ class ImageView extends Component {
       translateY: posY - (newRatio - oldRatio) * (newOrigin.y),
       transition: '',
       enableTransformAnimation: false,
-      lastAction: Actions.Free
+      lastAction: Actions.free
     });
     this.preTouchesClientx1y1x2y2 = [oneClientX, oneClientY, twoClientX, twoClientY];
     this.recordTimer('justFreeScaled', 100);
   }
 
   doubleClickScale = (target, clientX, clientY) => {
-    // todo 检测图片长宽比、原始尺寸等问题，适当跳过某些缩放模式
-    scaleModes.currentScaleMode = (scaleModes.currentScaleMode + 1) % 3;
-    console.log(`ratio ${scaleModes.currentScaleMode}`)
-    const getScaleRatio = (scaleMode) => {
-      let dimen = this.imagesSizes[this.state.currentIndex];
-      switch (scaleMode) {
-        case scaleModes.OriginalSize:
-          return dimen.originWidth / this.maskSize.width;
-        case scaleModes.ShortSideFit:
-          return dimen.width > dimen.height ? this.maskSize.height / dimen.height : this.maskSize.width / dimen.width;
-        default:
-          return 1;
-      }
-    };
+    let dimen = this.imagesSizes[this.state.currentIndex];
+    let newRatio = this.state.scaleRatio;
+    newRatio = this.doubleScaleRatios.nextRatio;
+    console.log(newRatio);
 
-    let newRatio = getScaleRatio(scaleModes.currentScaleMode);
     let rect = this.imgBounding.rect;
+    let mWidth = this.state.maskWidth, mHeight = this.state.maskHeight;
     let newOrigin = {
       x: this.relativeCoordinate(clientX, clientY, rect.left, rect.top).x,
       y: this.imagesSizes[this.state.currentIndex].height / 2,
     };
+    if (dimen.width * newRatio <= mWidth && dimen.height * newRatio <= mHeight) {
+      // 若缩放后的尺寸不足填充屏幕，则 origin 为图像中心，缩放从中部开始
+      newOrigin = {
+        x: dimen.width / 2,
+        y: dimen.height / 2
+      };
+      console.log(`new origin: ${newOrigin.x} ${newOrigin.y}`);
+    }
+    // fixme 位移计算有问题
+    // todo 修正落点在图像外的 origin 定位 - 目前是横屏时的第一张图
     let posX = rect.left + this.rectLeft2TransXFix;
     let posY = rect.top + this.rectTop2TransYFix;
     let transX = posX - (newRatio - this.state.scaleRatio) * newOrigin.x;
     let transY = posY - (newRatio - this.state.scaleRatio) * newOrigin.y;
-    if (scaleModes.currentScaleMode === scaleModes.LongSideFit) {
-      transX = transY = 0;
-    }
     this.setState({
       translateX: transX,
       translateY: transY,
@@ -378,27 +365,33 @@ class ImageView extends Component {
       transition: '',
       enableTransformAnimation: true,
       // 缩放部分编号是统一的
-      lastAction: scaleModes.currentScaleMode
-    }, () => setTimeout(() => {
-      // todo 使用 transition end 事件回调来做
-      this.inertiaDamp.scaleDamp();
-    }, 400));
+      lastAction: Actions.doubleClickScale
+    });
+  }
+
+  transitionEnd = (e) => {
+    if (e.propertyName === 'transform') {
+      if (e.target.tagName === 'IMG' && this.state.lastAction === Actions.doubleClickScale) {
+        this.inertiaDamp.scaleDamp();
+      }
+    }
   }
 
   transStyle = (idx) => {
     let state = this.state;
+    let mWidth = this.state.maskWidth;
     let style = Object.assign({},
       state.currentIndex === idx ?
         {
           transform: `matrix(${state.scaleRatio}, 0, 0, ${state.scaleRatio}, ` +
-            `${state.translateX - this.maskSize.width * idx}, ${state.translateY}) translateZ(0)`,
+            `${state.translateX - mWidth * idx}, ${state.translateY}) translateZ(0)`,
           transition: state.transition,
           willChange: `transform`
         } :
         {
-          transform: `matrix(1, 0, 0, 1, ${-this.maskSize.width * (state.currentIndex)}, 0)`,
+          transform: `matrix(1, 0, 0, 1, ${-mWidth * (state.currentIndex)}, 0)`,
         },
-      state.enableTransformAnimation ? { transition: 'transform 400ms' } : null
+      state.enableTransformAnimation ? { transition: 'transform 200ms' } : null
     );
     return style;
   }
@@ -418,6 +411,7 @@ class ImageView extends Component {
           {this.props.images.map((src, idx) =>
             <div key={idx}>
               <img draggable src={src} key={idx} alt={`${idx + 1}`}
+                onTransitionEnd={this.transitionEnd}
                 style={this.transStyle(idx)}
                 onLoad={(e) => this.onImagesLoad(e, idx)}
                 onContextMenu={(e) => { e.preventDefault() }} /></div>)}
@@ -475,10 +469,9 @@ class ImageView extends Component {
   rectTop2TransYFix = 0;
   rectLeft2TransXFix = 0;
   getRect2TranslateFix = () => {
-    let { height: maskHeight, width: maskWidth } = this.maskSize;
     let dimen = this.imagesSizes[this.state.currentIndex];
-    this.rectTop2TransYFix = - (maskHeight - dimen.height) / 2;
-    this.rectLeft2TransXFix = - (maskWidth - dimen.width) / 2;
+    this.rectTop2TransYFix = - (this.state.maskHeight - dimen.height) / 2;
+    this.rectLeft2TransXFix = - (this.state.maskWidth - dimen.width) / 2;
   }
 
   // 由于某个事件取消了触摸
@@ -508,11 +501,6 @@ class ImageView extends Component {
   // 接触点 - 图片左上角的值
   preTouchPosition = null;
 
-  maskSize = {
-    width: 0,
-    height: 0
-  }
-
   getMaskSize = () => {
     // 从 mask 换为直接获取 body 尺寸，从而可以在 will mount 阶段就可以获取
     let width = document.body.clientWidth;
@@ -532,6 +520,45 @@ class ImageView extends Component {
     }
   }
 
+  doubleScaleRatios = {
+    ratioLists: [],
+    computeScale: (a, b) => {
+      return a > b ? a / b : b / a;
+    },
+    that: this,
+    get nextRatio() {
+      let currentRatio = this.that.state.scaleRatio;
+      let index = this.ratioLists.indexOf(currentRatio);
+      if (index >= 0) {
+        return this.ratioLists[(index + 1) % this.ratioLists.length];
+      }
+      let scales = this.ratioLists.map((r, i) => ({ scale: currentRatio / r, idx: i })).sort((a, b) => b.scale - a.scale);
+      return this.ratioLists[scales[0].idx];
+    },
+    updateScaleRatioList: () => {
+      console.log('update scale ratios');
+      let ratios = [];
+      let mWidth = this.state.maskWidth, mHeight = this.state.maskHeight;
+      let { width, height, originHeight: oHeight } = this.imagesSizes[this.state.currentIndex];
+      // 长边适配
+      let heightLonger = height > width;
+      ratios.push(heightLonger ? mHeight / height : mWidth / width);
+      // 短边适配，去除长宽比合适的情况
+      if (height !== width) {
+        ratios.push(heightLonger ? mWidth / width : mHeight / height);
+      }
+      // 原始尺寸
+      let originRatio = oHeight / height;
+      if (!ratios.includes(originRatio)) {
+        ratios.push(originRatio);
+      }
+      this.doubleScaleRatios.ratioLists = ratios;
+    },
+    get minRatio() {
+      return this.ratioLists.sort()[0];
+    }
+  }
+
   // 绝对坐标转相对坐标，因为 transform-origin 只接受原始坐标值
   relativeCoordinate = (x, y, left, top) => {
     let ratio = this.state.scaleRatio;
@@ -543,13 +570,14 @@ class ImageView extends Component {
   updateOnResize = (() => {
     let tick = null;
     const update = () => {
-      // 注意依赖关系：计算 matrix 时用到了 maskSize，所以必须最先更新
-      this.maskSize = this.getMaskSize();
+      let maskSize = this.getMaskSize();
       this.setState({
         translateX: 0,
         translateY: 0,
         scaleRatio: 1,
-        enableTransformAnimation: false
+        enableTransformAnimation: false,
+        maskHeight: maskSize.height,
+        maskWidth: maskSize.width
       }, callback.bind(this));
       // I use the function keyword declaration to display the executing order better 
       // because jslint will warn the arrow function being used before defined.
@@ -561,10 +589,11 @@ class ImageView extends Component {
           size.height = img.height;
         });
         this.getRect2TranslateFix();
+        this.doubleScaleRatios.updateScaleRatioList();
       };
     };
     return () => {
-      // this.recordTimer 不适用，这里需要 debounce 函数
+      // debounce
       clearTimeout(tick);
       tick = setTimeout(update, 100);
     };
@@ -580,6 +609,11 @@ class ImageView extends Component {
     if (idx === this.state.currentIndex) {
       this.getRect2TranslateFix();
     }
+    let noEmpty = !this.imagesSizes.includes(undefined);
+    if (noEmpty && this.imagesSizes.length === this.props.images.length) {
+      this.imgBounding.loadImageBound(this.state.currentIndex);
+      this.doubleScaleRatios.updateScaleRatioList();
+    }
   }
 
   disableBodyMove = (e) => {
@@ -587,6 +621,10 @@ class ImageView extends Component {
   }
 
   componentWillMount = () => {
+    // deprecated lifecycle api
+  }
+
+  componentDidMount = () => {
     window.addEventListener('resize', this.updateOnResize);
     let passiveSupport = false;
     try {
@@ -599,11 +637,6 @@ class ImageView extends Component {
       window.addEventListener('passivetest', null, option);
     } catch (err) { }
     document.body.addEventListener('touchmove', this.disableBodyMove, passiveSupport ? { passive: false } : false);
-    this.maskSize = this.getMaskSize();
-  }
-
-  componentDidMount = () => {
-    this.imgBounding.loadImageBound(this.state.currentIndex);
   }
 
   componentWillUnmount = () => {
@@ -612,7 +645,7 @@ class ImageView extends Component {
     document.body.removeEventListener('touchmove', this.disableBodyMove);
   }
 
-  download = async (e, filename) => {
+  download = async (e) => {
     // todo 手机上无法通用地实现，目前仅发现 chrome 支持通过 blob 保存
     alert('call native method!')
   }
@@ -678,7 +711,7 @@ function ShowImageView(props = {}) {
       const container = document.querySelector('.__image_view__');
       ReactDOM.unmountComponentAtNode(container);
       if (props.onClose instanceof Function) {
-        props.onClose();
+        props.onClose.apply(null);
       }
     }
   }));
