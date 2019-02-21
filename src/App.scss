@@ -14,12 +14,13 @@ body {
 }
 
 .App-logo {
-  animation: App-logo-spin infinite 20s linear;
-  height: 40vmin;
+  animation: App-logo-spin infinite 12s ease-in-out;
+  height: 120px;
+  width: 130px;
 }
 
 .App-header {
-  background-color: #282c34;
+  background-color: #010101;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -41,4 +42,19 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+$backColor: #fffbe5;
+.App-header>button {
+  display: inline-block;
+  border-radius: 3px;
+  padding: 0.5rem 0;
+  margin: 0.5rem 1rem;
+  width: 11rem;
+  background: transparent;
+  border: 2px solid $backColor;
+  background: $backColor;
+  color: black;
+  outline: #0a0501;
+  font-weight: bold;
 }

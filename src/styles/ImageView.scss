@@ -1,6 +1,5 @@
 .__image_view__ {
   .mask {
-    transition: 500ms;
     position: absolute;
     top: 0;
     left: 0;
@@ -10,6 +9,8 @@
     z-index: 100;
     flex-direction: column;
     overflow: hidden;
+    transform: translateX(100%);
+    transition: transform .4s;
   }
 
   $iconHeight: 1.2rem;
@@ -24,7 +25,7 @@
     display: flex;
     height: $topBarHeight;
     justify-content: space-between;
-    background: rgba($color: #000, $alpha: 0.2);
+    background: rgba($color: #000, $alpha: 0.26);
     z-index: 210;
     transition: 200ms;
     // https://developers.google.com/web/fundamentals/performance/rendering/stick-to-compositor-only-properties-and-manage-layer-count?hl=zh-cn
@@ -85,5 +86,9 @@
 
   .download {
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Cpath fill='%23fff' d='M1024 645.2v330.7a48 48 0 0 1-48 48H48a48 48 0 0 1-48-48V645.2a48 48 0 0 1 96 0V928h832V645.3a48 48 0 0 1 96 0zM478.9 791.1a47.9 47.9 0 0 0 67.9 0l299.9-299.8a48 48 0 1 0-67.9-67.9L561.1 641.2V48a48 48 0 0 0-96 0v593.4L246.9 423.5a48 48 0 1 0-67.9 67.9l299.8 299.7z'/%3E%3C/svg%3E");
+  }
+
+  .noBackground {
+    background: none;
   }
 }

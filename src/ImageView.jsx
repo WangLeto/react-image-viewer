@@ -17,11 +17,25 @@ const MoveRatio = 15;
 // 自由缩放时，较长边最终的显示尺寸不小于自动生成比例的比例
 // finalAllowedMinRatio = freeScaleRatioByMinRatio * ratioList.min
 const freeScaleRatioByMinRatio = 0.6;
+
+// 测试浏览器是否支持较新的 addEventListener 参数；因为闭包，所以只会执行一次
+let passiveSupport = false;
+try {
+  let option = Object.defineProperty({}, 'passive', {
+    get: () => {
+      passiveSupport = true;
+      return false;
+    }
+  });
+  window.addEventListener('passivetest', null, option);
+} catch (err) { }
+
 // 使用 PureComponent，state 中如果使用 Array / Object，则需要在 shouldComponentUpdate 额外处理，或使用 immutable 思想
 class ImageView extends PureComponent {
   constructor(props) {
     super(props);
     let { width: mWidth, height: mHeight } = this.getMaskSize();
+    this.maskRef = React.createRef();
     this.state = {
       // 当前展示的图片序数
       currentIndex: this.props.currentIndex,
@@ -38,7 +52,7 @@ class ImageView extends PureComponent {
       // 从外部移入 state 内部，以配合 pure component 特性
       maskWidth: mWidth,
       maskHeight: mHeight,
-    }
+    };
   }
 
   // 判断：如果短时间内离开，且无移动动作，则为工具栏切换
@@ -107,7 +121,8 @@ class ImageView extends PureComponent {
       let posY = rect.top + this.rectTop2TransYFix;
       // 仅在高度大于 Y轴高度 的情况下支持 Y 轴移动
       let forbidTranslateY = false;
-      if (rect.height <= this.state.maskHeight) {
+      // 乘以 1.005 容错：280 * 1.005 = 281.4
+      if (rect.height <= this.state.maskHeight * 1.01) {
         forbidTranslateY = true;
       }
       let transX = touch.pageX - this.preTouchPosition.x + posX;
@@ -158,6 +173,7 @@ class ImageView extends PureComponent {
       let extraX = (lastTwo[1].x - lastTwo[0].x) * MoveRatio;
       let extraY = height > mHeight ? (lastTwo[1].y - lastTwo[0].y) * MoveRatio : 0;
       let transX = extraX + state.translateX;
+      // fixme 第二张图，缓动弹跳问题
       let transY = extraY + state.translateY;
       let shouldDamp = false;
 
@@ -165,8 +181,7 @@ class ImageView extends PureComponent {
         if (top > 0 || top + extraY > 0) {
           shouldDamp = true;
           transY = this.rectTop2TransYFix;
-        }
-        if (bottom < mHeight || bottom + extraY < mHeight) {
+        } else if (bottom < mHeight || bottom + extraY < mHeight) {
           shouldDamp = true;
           transY = state.translateY + mHeight - bottom;
         }
@@ -231,8 +246,7 @@ class ImageView extends PureComponent {
         if (top > 0) {
           shouldDamp = true;
           transY = this.rectTop2TransYFix;
-        }
-        if (bottom < mHeight) {
+        } else if (bottom < mHeight) {
           shouldDamp = true;
           transY = state.translateY + mHeight - bottom;
         }
@@ -333,38 +347,38 @@ class ImageView extends PureComponent {
   }
 
   doubleClickScale = (target, clientX, clientY) => {
-    let dimen = this.imagesSizes[this.state.currentIndex];
-    let newRatio = this.state.scaleRatio;
-    newRatio = this.doubleScaleRatios.nextRatio;
-    console.log(newRatio);
-
+    let { width, height } = this.imagesSizes[this.state.currentIndex];
+    let newRatio = this.doubleScaleRatios.nextRatio;
     let rect = this.imgBounding.rect;
     let mWidth = this.state.maskWidth, mHeight = this.state.maskHeight;
     let newOrigin = {
       x: this.relativeCoordinate(clientX, clientY, rect.left, rect.top).x,
+      // todo 对于 origin 的选取：参考快图浏览的实现的话，不需要使用回调函数纠正
       y: this.imagesSizes[this.state.currentIndex].height / 2,
     };
-    if (dimen.width * newRatio <= mWidth && dimen.height * newRatio <= mHeight) {
+    let isCenter = false;
+    if (width * newRatio <= mWidth && height * newRatio <= mHeight) {
       // 若缩放后的尺寸不足填充屏幕，则 origin 为图像中心，缩放从中部开始
       newOrigin = {
-        x: dimen.width / 2,
-        y: dimen.height / 2
+        x: width / 2,
+        y: height / 2
       };
-      console.log(`new origin: ${newOrigin.x} ${newOrigin.y}`);
+      isCenter = true;
     }
-    // fixme 位移计算有问题
-    // todo 修正落点在图像外的 origin 定位 - 目前是横屏时的第一张图
-    let posX = rect.left + this.rectLeft2TransXFix;
-    let posY = rect.top + this.rectTop2TransYFix;
-    let transX = posX - (newRatio - this.state.scaleRatio) * newOrigin.x;
-    let transY = posY - (newRatio - this.state.scaleRatio) * newOrigin.y;
+    let transX, transY;
+    if (!isCenter) {
+      transX = rect.left + this.rectLeft2TransXFix - (newRatio - this.state.scaleRatio) * newOrigin.x;
+      transY = rect.top + this.rectTop2TransYFix - (newRatio - this.state.scaleRatio) * newOrigin.y;
+    } else {
+      transX = -(newRatio - 1) * newOrigin.x;
+      transY = -(newRatio - 1) * newOrigin.y;
+    }
     this.setState({
       translateX: transX,
       translateY: transY,
       scaleRatio: newRatio,
       transition: '',
       enableTransformAnimation: true,
-      // 缩放部分编号是统一的
       lastAction: Actions.doubleClickScale
     });
   }
@@ -398,26 +412,30 @@ class ImageView extends PureComponent {
 
   render() {
     return (
-      // todo 添加进出场动画？
-      <div className="mask">
-        <Topbar close={this.props.close} download={this.download} isShow={this.state.showTopBar}
-          // todo 改进获取图片总数的方法
+      <div className="mask" ref={this.maskRef} onTransitionEnd={this.maskTransitionEnd}>
+        <Topbar close={this.closeWrap} download={this.download} isShow={this.state.showTopBar} enableDownload={this.props.enableDownload}
           indexInfo={`${this.state.currentIndex + 1} / ${this.props.images.length}`}></Topbar>
         <div className="images"
-          onTouchEnd={this.stopTouch}
-          onTouchMove={this.touchMove}
-          onTouchStart={this.startTouch}
-          onTouchCancel={this.cancelTouch}>
+          onTouchEnd={this.stopTouch} onTouchMove={this.touchMove} onTouchStart={this.startTouch} onTouchCancel={this.cancelTouch}>
           {this.props.images.map((src, idx) =>
-            <div key={idx}>
-              <img draggable src={src} key={idx} alt={`${idx + 1}`}
-                onTransitionEnd={this.transitionEnd}
-                style={this.transStyle(idx)}
-                onLoad={(e) => this.onImagesLoad(e, idx)}
-                onContextMenu={(e) => { e.preventDefault() }} /></div>)}
+            <div key={idx}><img draggable src={src} key={idx} alt={`${idx + 1}`} onTransitionEnd={this.transitionEnd}
+              style={this.transStyle(idx)} onLoad={(e) => this.onImagesLoad(e, idx)} onContextMenu={(e) => { e.preventDefault() }} /></div>)}
         </div>
       </div>
     );
+  }
+
+  closeWrap = () => {
+    this.maskRef.current.style.transform = 'translateX(100%)';
+    this.allClosed = true;
+  }
+
+  allClosed = false
+
+  maskTransitionEnd = () => {
+    if (this.allClosed) {
+      this.props.close();
+    }
   }
 
   toggleTopBar = () => {
@@ -512,10 +530,13 @@ class ImageView extends PureComponent {
   imgBounding = {
     img: null,
     get rect() {
-      return this.img.getBoundingClientRect();
+      // 有时 img 还没有被赋值，不应该啊？？
+      if (this.img) {
+        return this.img.getBoundingClientRect();
+      }
+      return { top: 0, right: 0, bottom: 0, left: 0, height: 0, width: 0 };
     },
     loadImageBound(index) {
-      // console.log(`load image bound %c${index}`, 'color: orange; font-weight: bold');
       this.img = document.querySelectorAll('.images img')[index];
     }
   }
@@ -532,20 +553,19 @@ class ImageView extends PureComponent {
       if (index >= 0) {
         return this.ratioLists[(index + 1) % this.ratioLists.length];
       }
-      let scales = this.ratioLists.map((r, i) => ({ scale: currentRatio / r, idx: i })).sort((a, b) => b.scale - a.scale);
-      return this.ratioLists[scales[0].idx];
+      return (this.ratioLists.map((r, i) =>
+        ({ ratio: r, scale: currentRatio / r, idx: i })).sort((a, b) => b.scale - a.scale))[0].ratio;
     },
     updateScaleRatioList: () => {
-      console.log('update scale ratios');
+      // console.log('update scale ratios');
       let ratios = [];
       let mWidth = this.state.maskWidth, mHeight = this.state.maskHeight;
       let { width, height, originHeight: oHeight } = this.imagesSizes[this.state.currentIndex];
-      // 长边适配
-      let heightLonger = height > width;
-      ratios.push(heightLonger ? mHeight / height : mWidth / width);
-      // 短边适配，去除长宽比合适的情况
-      if (height !== width) {
-        ratios.push(heightLonger ? mWidth / width : mHeight / height);
+      // 长宽适配，去除重复比例
+      let heightScale = mHeight / height, widthScale = mWidth / width;
+      ratios.push(heightScale);
+      if (heightScale !== widthScale) {
+        ratios.push(widthScale);
       }
       // 原始尺寸
       let originRatio = oHeight / height;
@@ -621,32 +641,27 @@ class ImageView extends PureComponent {
   }
 
   componentWillMount = () => {
-    // deprecated lifecycle api
+    // DO NOT use, this is a deprecated lifecycle api!
   }
 
   componentDidMount = () => {
+    // show image viewer
+    setTimeout(() => {
+      this.maskRef.current.style.transform = 'translate(0,0)';
+    });
+
     window.addEventListener('resize', this.updateOnResize);
-    let passiveSupport = false;
-    try {
-      let option = Object.defineProperty({}, 'passive', {
-        get: () => {
-          passiveSupport = true;
-          return false;
-        }
-      });
-      window.addEventListener('passivetest', null, option);
-    } catch (err) { }
     document.body.addEventListener('touchmove', this.disableBodyMove, passiveSupport ? { passive: false } : false);
   }
 
   componentWillUnmount = () => {
-    this.props.onUnmount();
     window.removeEventListener('resize', this.updateOnResize);
+    this.props.onUnmount();
     document.body.removeEventListener('touchmove', this.disableBodyMove);
   }
 
   download = async (e) => {
-    // todo 手机上无法通用地实现，目前仅发现 chrome 支持通过 blob 保存
+    // 手机上无法通用地实现，目前仅发现 chrome 支持通过 blob 保存
     alert('call native method!')
   }
 }
@@ -656,7 +671,8 @@ function Topbar(props) {
     <div className="top" style={{ transform: props.isShow ? null : `translateY(-120%)` }}>
       <div className="back" onClick={props.close}></div>
       <div className="index">{props.indexInfo}</div>
-      <div className="download" onClick={props.download}></div>
+      {props.enableDownload ?
+        <div className="download" onClick={props.download}></div> : <div className="download noBackground"></div>}
       <div className="shadow"></div>
     </div>
   );
@@ -678,13 +694,14 @@ function DescriptionPanel(props) {
  */
 // todo 传入：是否允许下载、current index、是否循环展示
 function ShowImageView(props = {}) {
-  let container = document.querySelector('.__image_view__');
-  if (container) {
-    document.body.appendChild(container);
+  let viewerContainer = document.querySelector('.__image_view__');
+  let bodyOverflow = document.body.style.overflow;
+  if (viewerContainer) {
+    document.body.appendChild(viewerContainer);
   } else {
-    container = document.createElement('div');
-    container.className = "__image_view__";
-    document.body.appendChild(container);
+    viewerContainer = document.createElement('div');
+    viewerContainer.className = "__image_view__";
+    document.body.appendChild(viewerContainer);
   }
 
   if (typeof props === 'string') {
@@ -697,7 +714,7 @@ function ShowImageView(props = {}) {
     };
   }
   // { images: Array(string), currentIndex: number }
-  props = Object.assign({ currentIndex: 0 }, props);
+  props = Object.assign({ currentIndex: 0, enableDownload: false }, props);
 
   if (typeof props.images === 'undefined') {
     throw new Error('Didn\'t pass the necessary parameters!');
@@ -705,17 +722,19 @@ function ShowImageView(props = {}) {
 
   const component = React.createElement(ImageView, Object.assign(props, {
     close: () => {
-      ReactDOM.render(null, container);
+      ReactDOM.render(null, viewerContainer);
     },
     onUnmount: () => {
       const container = document.querySelector('.__image_view__');
       ReactDOM.unmountComponentAtNode(container);
+      document.body.style.overflow = bodyOverflow;
       if (props.onClose instanceof Function) {
         props.onClose.apply(null);
       }
     }
   }));
-  ReactDOM.render(component, container);
+  ReactDOM.render(component, viewerContainer);
+  document.body.style.overflow = 'hidden';
 }
 
 export default ShowImageView;
