@@ -1,6 +1,6 @@
 # React Image Viewer
 
-An image viewer with native-like experience using react.
+An image viewer with native-like experience using react. Try the [demo](http://blog.letow.top/react-image-viewer)!
 
 ### `npm start`
 
@@ -37,7 +37,7 @@ class App extends Component {
 
 # React 图片查看器
 
-用 React 打造接近原生体验的图片浏览器。
+用 React 打造接近原生体验的图片浏览器。[亲自体验](http://blog.letow.top/react-image-viewer)！
 
 ### `npm start`
 
