@@ -30,6 +30,9 @@ try {
   window.addEventListener('passivetest', null, option);
 } catch (err) { }
 
+// 离开时的图片序数，返回打开时以此为据
+let lastVisitImageIndex = 0;
+
 // 使用 PureComponent，state 中如果使用 Array / Object，则需要在 shouldComponentUpdate 额外处理，或使用 immutable 思想
 class ImageView extends PureComponent {
   constructor(props) {
@@ -173,7 +176,7 @@ class ImageView extends PureComponent {
       let extraX = (lastTwo[1].x - lastTwo[0].x) * MoveRatio;
       let extraY = height > mHeight ? (lastTwo[1].y - lastTwo[0].y) * MoveRatio : 0;
       let transX = extraX + state.translateX;
-      // fixme 第二张图，缓动弹跳问题
+      // fixme 第二张图横屏，平动时发生回弹
       let transY = extraY + state.translateY;
       let shouldDamp = false;
 
@@ -349,30 +352,37 @@ class ImageView extends PureComponent {
   doubleClickScale = (target, clientX, clientY) => {
     let { width, height } = this.imagesSizes[this.state.currentIndex];
     let newRatio = this.doubleScaleRatios.nextRatio;
-    let rect = this.imgBounding.rect;
+    let { left, top } = this.imgBounding.rect;
     let mWidth = this.state.maskWidth, mHeight = this.state.maskHeight;
-    let newOrigin = {
-      x: this.relativeCoordinate(clientX, clientY, rect.left, rect.top).x,
-      // todo 对于 origin 的选取：参考快图浏览的实现的话，不需要使用回调函数纠正
-      y: this.imagesSizes[this.state.currentIndex].height / 2,
-    };
-    let isCenter = false;
-    if (width * newRatio <= mWidth && height * newRatio <= mHeight) {
-      // 若缩放后的尺寸不足填充屏幕，则 origin 为图像中心，缩放从中部开始
-      newOrigin = {
-        x: width / 2,
-        y: height / 2
-      };
-      isCenter = true;
-    }
-    let transX, transY;
-    if (!isCenter) {
-      transX = rect.left + this.rectLeft2TransXFix - (newRatio - this.state.scaleRatio) * newOrigin.x;
-      transY = rect.top + this.rectTop2TransYFix - (newRatio - this.state.scaleRatio) * newOrigin.y;
+    let newOrigin = this.relativeCoordinate(clientX, clientY, left, top);
+    let transX = left + this.rectLeft2TransXFix - (newRatio - this.state.scaleRatio) * newOrigin.x;
+    let transY = top + this.rectTop2TransYFix - (newRatio - this.state.scaleRatio) * newOrigin.y;
+
+    if (height * newRatio < mHeight) {
+      transY = -(newRatio - 1) * height / 2;
     } else {
-      transX = -(newRatio - 1) * newOrigin.x;
-      transY = -(newRatio - 1) * newOrigin.y;
+      let finalBottom = transY - this.rectTop2TransYFix + height * newRatio;
+      if (finalBottom < mHeight) {
+        transY += mHeight - finalBottom;
+      }
+      let finalTop = transY - this.rectTop2TransYFix;
+      if (finalTop > 0) {
+        transY -= finalTop;
+      }
     }
+    if (width * newRatio <= mWidth) {
+      transX = -(newRatio - 1) * width / 2;
+    } else {
+      let finalLeft = transX - this.rectLeft2TransXFix;
+      if (finalLeft > 0) {
+        transX -= finalLeft;
+      }
+      let finalRight = transX - this.rectLeft2TransXFix + width * newRatio;
+      if (finalRight < mWidth) {
+        transX += mWidth - finalRight;
+      }
+    }
+
     this.setState({
       translateX: transX,
       translateY: transY,
@@ -381,14 +391,6 @@ class ImageView extends PureComponent {
       enableTransformAnimation: true,
       lastAction: Actions.doubleClickScale
     });
-  }
-
-  transitionEnd = (e) => {
-    if (e.propertyName === 'transform') {
-      if (e.target.tagName === 'IMG' && this.state.lastAction === Actions.doubleClickScale) {
-        this.inertiaDamp.scaleDamp();
-      }
-    }
   }
 
   transStyle = (idx) => {
@@ -418,7 +420,7 @@ class ImageView extends PureComponent {
         <div className="images"
           onTouchEnd={this.stopTouch} onTouchMove={this.touchMove} onTouchStart={this.startTouch} onTouchCancel={this.cancelTouch}>
           {this.props.images.map((src, idx) =>
-            <div key={idx}><img draggable src={src} key={idx} alt={`${idx + 1}`} onTransitionEnd={this.transitionEnd}
+            <div key={idx}><img draggable src={src} key={idx} alt={`${idx + 1}`}
               style={this.transStyle(idx)} onLoad={(e) => this.onImagesLoad(e, idx)} onContextMenu={(e) => { e.preventDefault() }} /></div>)}
         </div>
       </div>
@@ -427,13 +429,14 @@ class ImageView extends PureComponent {
 
   closeWrap = () => {
     this.maskRef.current.style.transform = 'translateX(100%)';
-    this.allClosed = true;
+    this.imageViewerClosed = true;
+    lastVisitImageIndex = this.state.currentIndex;
   }
 
-  allClosed = false
+  imageViewerClosed = false
 
   maskTransitionEnd = () => {
-    if (this.allClosed) {
+    if (this.imageViewerClosed) {
       this.props.close();
     }
   }
@@ -678,23 +681,14 @@ function Topbar(props) {
   );
 }
 
-/* future job
-function DescriptionPanel(props) {
-  return (
-    <div className="bottom">
-      <div className="title">{props.description.title}</div>
-      <div className="content">{props.description.content}</div>
-    </div>
-  );
-}*/
-
+let viewerContainer = document.querySelector('.__image_view__');
 /*
  * props: 传入图片的字符串（单张）或数组（多张）
  * props: 传入对象   { images: 数组, onClose: 关闭时的回调函数 }
  */
 // todo 传入：是否允许下载、current index、是否循环展示
 function ShowImageView(props = {}) {
-  let viewerContainer = document.querySelector('.__image_view__');
+  // todo 添加节流、单个实例控制
   let bodyOverflow = document.body.style.overflow;
   if (viewerContainer) {
     document.body.appendChild(viewerContainer);
@@ -720,8 +714,31 @@ function ShowImageView(props = {}) {
     throw new Error('Didn\'t pass the necessary parameters!');
   }
 
+  // fixme history bug
+  if (false && props.enableHistory) {
+    if (props.onClose !== undefined) {
+      console.error('onClose callback function will not work with enableHistory!');
+    }
+    let state = {};
+    for (let k in props) {
+      if (typeof props[k] !== 'function') {
+        state[k] = props[k];
+      }
+    }
+    let markedState = { imageViewerClosed: true };
+    if (window.history.state) {
+      markedState = Object.assign(window.history.state, markedState);
+    }
+    window.history.replaceState(markedState, '', window.location.href);
+    window.history.pushState(state, '', 'imageViewer');
+    // anonymous function could be registered multiple times, the normal won't
+    window.addEventListener('popstate', onPopState);
+  }
   const component = React.createElement(ImageView, Object.assign(props, {
     close: () => {
+      if (false && props.enableHistory) {
+        window.history.back();
+      }
       ReactDOM.render(null, viewerContainer);
     },
     onUnmount: () => {
@@ -735,6 +752,22 @@ function ShowImageView(props = {}) {
   }));
   ReactDOM.render(component, viewerContainer);
   document.body.style.overflow = 'hidden';
+};
+
+function onPopState(e) {
+  // console.log(e.state);
+  let state = e.state;
+  if (state) {
+    if (state.imageViewerClosed) {
+      ReactDOM.render(null, viewerContainer);
+    } else if (state.currentIndex !== undefined) {
+      state.currentIndex = lastVisitImageIndex;
+      console.log(lastVisitImageIndex);
+      delete state.imageViewerClosed;
+      console.log(state);
+      ShowImageView(state);
+    }
+  }
 }
 
 export default ShowImageView;
