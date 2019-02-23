@@ -1,39 +1,72 @@
-# 可爱熊图片查看器
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+# React Image Viewer
 
-## Available Scripts
-
-In the project directory, you can run:
+An image viewer with native-like experience using react.
 
 ### `npm start`
 
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
-
-The page will reload if you make edits.<br>
-You will also see any lint errors in the console.
-
-### `npm test`
-
-Launches the test runner in the interactive watch mode.<br>
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Runs the app in the development mode. [http://localhost:3000](http://localhost:3000) to view it in the browser.
 
 ### `npm run build`
 
-Builds the app for production to the `build` folder.<br>
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Build the project for deploy to `build` folder.
 
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
+## How to use
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```javascript
+import ShowImageView from './ImageView';
 
-### `npm run eject`
+class App extends Component {
+  componentDidMount() {
+    this.showImageView();
+  }
+  showImageView = () => {
+    ShowImageView({
+      // pass images' url in Array
+      images: ['url1', 'url2'],
+      // [optional] specify viewer's initial index
+      currentIndex: 0,
+      // [optional] specify callback function when close viewer
+      onClose: () => console.log('viewer onclose callback')
+    });
+  }
+  // ...
+}
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
 
-Instead, it will copy all the configuration files and the transitive dependencies (Webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+# React 图片查看器
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+用 React 打造接近原生体验的图片浏览器。
+
+### `npm start`
+
+使用开发模式运行程序，浏览器打开 `http://localhost:3000` 进行查看。
+
+### `npm run build`
+
+打包发布文件至 `build` 文件夹下。
+
+## 使用方法
+
+```javascript
+import ShowImageView from './ImageView';
+
+class App extends Component {
+  componentDidMount() {
+    this.showImageView();
+  }
+  showImageView = () => {
+    ShowImageView({
+      // 使用数组传递图片地址
+      images: ['url1', 'url2'],
+      // [可选] 执行最初展示图片的序数
+      currentIndex: 0,
+      // [可选] 指定关闭查看器时的回调函数
+      onClose: () => console.log('viewer onclose callback')
+    });
+  }
+  // ...
+}
+```
+

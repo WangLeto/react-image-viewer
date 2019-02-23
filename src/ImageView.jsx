@@ -713,6 +713,10 @@ function ShowImageView(props = {}) {
   if (typeof props.images === 'undefined') {
     throw new Error('Didn\'t pass the necessary parameters!');
   }
+  if (props.currentIndex >= props.images.length) {
+    console.error('Specified image index is larger than images count!');
+    props.currentIndex = 0;
+  }
 
   // fixme history bug
   if (false && props.enableHistory) {
