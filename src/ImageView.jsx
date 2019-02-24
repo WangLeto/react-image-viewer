@@ -93,6 +93,7 @@ class ImageView extends PureComponent {
       if (this.timers.doubleClickTimer) {
         let removedTouch = e.changedTouches[0];
         this.doubleClickScale(removedTouch.target, removedTouch.clientX, removedTouch.clientY);
+        this.clearTimeout('doubleClickTimer');
         return;
       }
       if (!this.timers.firstClickTimer && !this.timers.doubleClickTimer) {
@@ -174,9 +175,9 @@ class ImageView extends PureComponent {
       }
 
       let extraX = (lastTwo[1].x - lastTwo[0].x) * MoveRatio;
-      let extraY = height > mHeight ? (lastTwo[1].y - lastTwo[0].y) * MoveRatio : 0;
+      // using `height > mHeight` as condition leads to bounce
+      let extraY = height > mHeight * 1.02 ? (lastTwo[1].y - lastTwo[0].y) * MoveRatio : 0;
       let transX = extraX + state.translateX;
-      // fixme 第二张图横屏，平动时发生回弹
       let transY = extraY + state.translateY;
       let shouldDamp = false;
 
@@ -676,20 +677,26 @@ function Topbar(props) {
       <div className="index">{props.indexInfo}</div>
       {props.enableDownload ?
         <div className="download" onClick={props.download}></div> : <div className="download noBackground"></div>}
-      <div className="shadow"></div>
+      {/* <div className="shadow"></div> */}
     </div>
   );
 }
 
-let viewerContainer = document.querySelector('.__image_view__');
 /*
  * props: 传入图片的字符串（单张）或数组（多张）
  * props: 传入对象   { images: 数组, onClose: 关闭时的回调函数 }
  */
+let mutex = false;
 // todo 传入：是否允许下载、current index、是否循环展示
 function ShowImageView(props = {}) {
-  // todo 添加节流、单个实例控制
+  if (mutex) {
+    console.warn('Image viewer has been showing');
+    return;
+  }
+  mutex = true;
+
   let bodyOverflow = document.body.style.overflow;
+  let viewerContainer = document.querySelector('.__image_view__');
   if (viewerContainer) {
     document.body.appendChild(viewerContainer);
   } else {
@@ -719,7 +726,7 @@ function ShowImageView(props = {}) {
   }
 
   // fixme history bug
-  if (false && props.enableHistory) {
+  if (props.enableHistory) {
     if (props.onClose !== undefined) {
       console.error('onClose callback function will not work with enableHistory!');
     }
@@ -733,17 +740,18 @@ function ShowImageView(props = {}) {
     if (window.history.state) {
       markedState = Object.assign(window.history.state, markedState);
     }
+    // anonymous function could be registered multiple times, the normal won't
+    window.addEventListener('popstate', (e) => onPopState(e, viewerContainer));
     window.history.replaceState(markedState, '', window.location.href);
     window.history.pushState(state, '', 'imageViewer');
-    // anonymous function could be registered multiple times, the normal won't
-    window.addEventListener('popstate', onPopState);
   }
   const component = React.createElement(ImageView, Object.assign(props, {
     close: () => {
-      if (false && props.enableHistory) {
+      // todo
+      if (props.enableHistory) {
         window.history.back();
       }
-      ReactDOM.render(null, viewerContainer);
+      closeViewer(viewerContainer);
     },
     onUnmount: () => {
       const container = document.querySelector('.__image_view__');
@@ -758,17 +766,22 @@ function ShowImageView(props = {}) {
   document.body.style.overflow = 'hidden';
 };
 
-function onPopState(e) {
-  // console.log(e.state);
+function closeViewer(viewerContainer) {
+  ReactDOM.render(null, viewerContainer);
+  mutex = false;
+}
+
+function onPopState(e, viewerContainer) {
+  console.log(e.state);
   let state = e.state;
   if (state) {
     if (state.imageViewerClosed) {
-      ReactDOM.render(null, viewerContainer);
+      closeViewer(viewerContainer);
     } else if (state.currentIndex !== undefined) {
       state.currentIndex = lastVisitImageIndex;
       console.log(lastVisitImageIndex);
       delete state.imageViewerClosed;
-      console.log(state);
+      // console.log(state);
       ShowImageView(state);
     }
   }
