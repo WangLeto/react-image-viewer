@@ -8,19 +8,19 @@ self.__precacheManifest = [
     "url": "//blog.letow.top/react-image-viewer/static/js/runtime~main.bc43c624.js"
   },
   {
-    "revision": "2eff93db624aeaf8f254",
-    "url": "//blog.letow.top/react-image-viewer/static/js/main.2eff93db.chunk.js"
+    "revision": "853d340fc2c734cd3a0a",
+    "url": "//blog.letow.top/react-image-viewer/static/js/main.853d340f.chunk.js"
   },
   {
     "revision": "76e478925fafe0590985",
     "url": "//blog.letow.top/react-image-viewer/static/js/2.76e47892.chunk.js"
   },
   {
-    "revision": "2eff93db624aeaf8f254",
-    "url": "//blog.letow.top/react-image-viewer/static/css/main.52ac4692.chunk.css"
+    "revision": "853d340fc2c734cd3a0a",
+    "url": "//blog.letow.top/react-image-viewer/static/css/main.b5544eb4.chunk.css"
   },
   {
-    "revision": "35a7b2b17a3597cf32c9911611326aef",
+    "revision": "78a5ec60114569ff63f8f5ca1ac09e3b",
     "url": "//blog.letow.top/react-image-viewer/index.html"
   }
 ];

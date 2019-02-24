@@ -747,7 +747,7 @@ function ShowImageView(props = {}) {
   }
   const component = React.createElement(ImageView, Object.assign(props, {
     close: () => {
-      // todo
+      // fixme url 不对
       if (props.enableHistory) {
         window.history.back();
       }

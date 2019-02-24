@@ -14,7 +14,7 @@
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/3.6.3/workbox-sw.js");
 
 importScripts(
-  "//blog.letow.top/react-image-viewer/precache-manifest.fbbfde34da0e3d6e7d085def9502ad23.js"
+  "//blog.letow.top/react-image-viewer/precache-manifest.f471e7f0207202d5cab226477b0fb68f.js"
 );
 
 workbox.clientsClaim();
