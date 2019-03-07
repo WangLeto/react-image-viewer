@@ -170,7 +170,7 @@ module.exports = function(webpackEnv) {
           (info => path.resolve(info.absoluteResourcePath).replace(/\\/g, '/')),
     },
     optimization: {
-      minimize: isEnvProduction,
+      minimize: false,
       minimizer: [
         // This is only used in production mode
         new TerserPlugin({
@@ -494,9 +494,9 @@ module.exports = function(webpackEnv) {
                   removeEmptyAttributes: true,
                   removeStyleLinkTypeAttributes: true,
                   keepClosingSlash: true,
-                  minifyJS: true,
-                  minifyCSS: true,
-                  minifyURLs: true,
+                  minifyJS: false,
+                  minifyCSS: false,
+                  minifyURLs: false,
                 },
               }
             : undefined
