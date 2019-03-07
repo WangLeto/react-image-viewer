@@ -524,9 +524,10 @@ class ImageView extends PureComponent {
   preTouchPosition = null;
 
   getMaskSize = () => {
-    // 从 mask 换为直接获取 body 尺寸，从而可以在 will mount 阶段就可以获取
-    let width = document.body.clientWidth;
-    let height = document.body.clientHeight;
+    // 从 mask 换为直接获取屏幕尺寸，从而可以在 will mount 阶段就可以获取
+    // 不专业了不是，人家都准备取消 will mount 这个阶段的生命周期函数了
+    let width = window.screen.width;
+    let height = window.screen.height;
     return { width: width, height: height };
   };
 
