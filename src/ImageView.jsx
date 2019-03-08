@@ -526,8 +526,8 @@ class ImageView extends PureComponent {
   getMaskSize = () => {
     // 从 mask 换为直接获取屏幕尺寸，从而可以在 will mount 阶段就可以获取
     // 不专业了不是，人家都准备取消 will mount 这个阶段的生命周期函数了
-    let width = window.screen.width;
-    let height = window.screen.height;
+    let width = window.innerWidth;
+    let height = window.innerHeight;
     return { width: width, height: height };
   };
 
