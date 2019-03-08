@@ -26,7 +26,9 @@ class App extends Component {
       // [optional] specify viewer's initial index
       currentIndex: 0,
       // [optional] specify callback function when close viewer
-      onClose: () => console.log('viewer onclose callback')
+      onClose: () => console.log('viewer onclose callback'),
+      // [optional] make go back action close image viewer instead of closing page
+      enableGoBack: true
     });
   }
   // ...
@@ -63,7 +65,9 @@ class App extends Component {
       // [可选] 执行最初展示图片的序数
       currentIndex: 0,
       // [可选] 指定关闭查看器时的回调函数
-      onClose: () => console.log('viewer onclose callback')
+      onClose: () => console.log('viewer onclose callback'),
+      // [可选] 进行返回操作时关闭图片查看器，而不是整个页面
+      enableGoBack: true
     });
   }
   // ...

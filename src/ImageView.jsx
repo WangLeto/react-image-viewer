@@ -2,6 +2,11 @@ import React, { PureComponent } from 'react';
 import ReactDOM from 'react-dom';
 import './styles/ImageView.scss';
 
+// 反范式编程史上的经典一笔
+let viewerHandle = null;
+// 自定义哈希
+const ViewerHash = 'react_image_viewer';
+
 // 切换图片的方向
 const orientation_left = -1, orientation_right = 1;
 
@@ -30,9 +35,6 @@ try {
   window.addEventListener('passivetest', null, option);
 } catch (err) { }
 
-// 离开时的图片序数，返回打开时以此为据
-let lastVisitImageIndex = 0;
-
 // 使用 PureComponent，state 中如果使用 Array / Object，则需要在 shouldComponentUpdate 额外处理，或使用 immutable 思想
 class ImageView extends PureComponent {
   constructor(props) {
@@ -56,6 +58,7 @@ class ImageView extends PureComponent {
       maskWidth: mWidth,
       maskHeight: mHeight,
     };
+    viewerHandle = this;
   }
 
   // 判断：如果短时间内离开，且无移动动作，则为工具栏切换
@@ -431,7 +434,11 @@ class ImageView extends PureComponent {
   closeWrap = () => {
     this.maskRef.current.style.transform = 'translateX(100%)';
     this.imageViewerClosed = true;
-    lastVisitImageIndex = this.state.currentIndex;
+    if (this.props.enableGoBack) {
+      if (window.location.hash && window.location.hash.includes(ViewerHash)) {
+        window.history.back();
+      }
+    }
   }
 
   imageViewerClosed = false
@@ -725,33 +732,17 @@ function ShowImageView(props = {}) {
     console.error('Specified image index is larger than images count!');
     props.currentIndex = 0;
   }
-
-  // fixme history bug
-  if (props.enableHistory) {
-    if (props.onClose !== undefined) {
-      console.error('onClose callback function will not work with enableHistory!');
-    }
-    let state = {};
-    for (let k in props) {
-      if (typeof props[k] !== 'function') {
-        state[k] = props[k];
+  if (props.enableGoBack) {
+    setTimeout(() => window.location.hash = ViewerHash, 500);
+    window.addEventListener('hashchange', e => {
+      if (e.oldURL && e.oldURL.includes(ViewerHash) && mutex) {
+        viewerHandle.closeWrap.apply(viewerHandle);
       }
-    }
-    let markedState = { imageViewerClosed: true };
-    if (window.history.state) {
-      markedState = Object.assign(window.history.state, markedState);
-    }
-    // anonymous function could be registered multiple times, the normal won't
-    window.addEventListener('popstate', (e) => onPopState(e, viewerContainer));
-    window.history.replaceState(markedState, '', window.location.href);
-    window.history.pushState(state, '', 'imageViewer');
+    }, false);
   }
+
   const component = React.createElement(ImageView, Object.assign(props, {
     close: () => {
-      // fixme url 不对
-      if (props.enableHistory) {
-        window.history.back();
-      }
       closeViewer(viewerContainer);
     },
     onUnmount: () => {
@@ -770,21 +761,6 @@ function ShowImageView(props = {}) {
 function closeViewer(viewerContainer) {
   ReactDOM.render(null, viewerContainer);
   mutex = false;
-}
-
-function onPopState(e, viewerContainer) {
-  let state = e.state;
-  if (state) {
-    if (state.imageViewerClosed) {
-      closeViewer(viewerContainer);
-    } else if (state.currentIndex !== undefined) {
-      state.currentIndex = lastVisitImageIndex;
-      console.log(lastVisitImageIndex);
-      delete state.imageViewerClosed;
-      // console.log(state);
-      ShowImageView(state);
-    }
-  }
 }
 
 export default ShowImageView;
