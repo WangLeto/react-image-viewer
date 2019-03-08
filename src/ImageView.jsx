@@ -129,8 +129,8 @@ class ImageView extends PureComponent {
       if (rect.height <= this.state.maskHeight * 1.01) {
         forbidTranslateY = true;
       }
-      let transX = touch.pageX - this.preTouchPosition.x + posX;
-      let transY = forbidTranslateY ? this.state.translateY : touch.pageY - this.preTouchPosition.y + posY;
+      let transX = touch.clientX - this.preTouchPosition.x + posX;
+      let transY = forbidTranslateY ? this.state.translateY : touch.clientY - this.preTouchPosition.y + posY;
 
       this.setState({
         translateX: transX,
@@ -140,7 +140,7 @@ class ImageView extends PureComponent {
         lastAction: Actions.move
       });
       this.recordPreTouchPosition(touch.clientX, touch.clientY);
-      this.inertiaDamp.recordTranslate(touch.pageX, touch.pageY);
+      this.inertiaDamp.recordTranslate(touch.clientX, touch.clientY);
     }
   }
 
@@ -773,7 +773,6 @@ function closeViewer(viewerContainer) {
 }
 
 function onPopState(e, viewerContainer) {
-  console.log(e.state);
   let state = e.state;
   if (state) {
     if (state.imageViewerClosed) {
