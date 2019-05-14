@@ -73,4 +73,4 @@ class App extends Component {
   // ...
 }
 ```
-如果你在使用 router，最好避免启用 `enableGoBack`，而利用 router 来实现返回键的关闭效果。
+**注意：**如果你在使用 router，不要启用 `enableGoBack`，利用 router 自身来实现返回键的关闭效果。
