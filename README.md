@@ -34,7 +34,7 @@ class App extends Component {
   // ...
 }
 ```
-As I tried, if you are using a router, it would be better to choose the router to implement a history go back operation instead of enabling the `enableGoBack`.
+If you are using a router, just use router to implement a history go back operation instead of enabling `enableGoBack`.
 
 
 # React 图片查看器
@@ -73,4 +73,4 @@ class App extends Component {
   // ...
 }
 ```
-**注意：**如果你在使用 router，不要启用 `enableGoBack`，利用 router 自身来实现返回键的关闭效果。
+**注意：** 如果你在使用 router，不要启用 `enableGoBack`，利用 router 自身来实现返回键的关闭效果。
